@@ -582,21 +582,86 @@ class InteractionSettingsActivity : AppCompatActivity() {
             loadingDialog.dismiss()
 
             val sortedApps = allApps.sortedBy { it.appName.lowercase() }
-            val appNames = sortedApps.map { it.appName }.toTypedArray()
-            val pkgNames = sortedApps.map { it.packageName }.toTypedArray()
-
-            val checkedItems = BooleanArray(sortedApps.size) { i ->
-                currentSelected.contains(pkgNames[i])
+            val selectedPkgs = currentSelected.toMutableSet()
+            
+            var displayApps = sortedApps
+            
+            val density = resources.displayMetrics.density
+            val container = android.widget.LinearLayout(this@InteractionSettingsActivity).apply {
+                orientation = android.widget.LinearLayout.VERTICAL
+                setPadding((20 * density).toInt(), (10 * density).toInt(), (20 * density).toInt(), 0)
             }
+
+            val searchBar = com.google.android.material.textfield.TextInputEditText(this@InteractionSettingsActivity).apply {
+                hint = "Search apps..."
+                setSingleLine()
+                layoutParams = android.widget.LinearLayout.LayoutParams(
+                    android.widget.LinearLayout.LayoutParams.MATCH_PARENT,
+                    android.widget.LinearLayout.LayoutParams.WRAP_CONTENT
+                )
+            }
+            
+            val textInputLayout = com.google.android.material.textfield.TextInputLayout(this@InteractionSettingsActivity).apply {
+                boxBackgroundMode = com.google.android.material.textfield.TextInputLayout.BOX_BACKGROUND_OUTLINE
+                setBoxCornerRadii(12 * density, 12 * density, 12 * density, 12 * density)
+                addView(searchBar)
+                layoutParams = android.widget.LinearLayout.LayoutParams(
+                    android.widget.LinearLayout.LayoutParams.MATCH_PARENT,
+                    android.widget.LinearLayout.LayoutParams.WRAP_CONTENT
+                ).apply { bottomMargin = (10 * density).toInt() }
+            }
+            container.addView(textInputLayout)
+
+            val listView = android.widget.ListView(this@InteractionSettingsActivity).apply {
+                choiceMode = android.widget.ListView.CHOICE_MODE_MULTIPLE
+                layoutParams = android.widget.LinearLayout.LayoutParams(
+                    android.widget.LinearLayout.LayoutParams.MATCH_PARENT,
+                    (400 * density).toInt()
+                )
+            }
+            container.addView(listView)
+
+            fun updateList(query: String) {
+                displayApps = if (query.isEmpty()) sortedApps
+                else sortedApps.filter { it.appName.contains(query, ignoreCase = true) }
+                
+                val adapter = android.widget.ArrayAdapter(
+                    this@InteractionSettingsActivity,
+                    android.R.layout.simple_list_item_multiple_choice,
+                    displayApps.map { it.appName }.toTypedArray()
+                )
+                listView.adapter = adapter
+                
+                // Restore checked states
+                displayApps.forEachIndexed { index, app ->
+                    listView.setItemChecked(index, selectedPkgs.contains(app.packageName))
+                }
+            }
+
+            updateList("")
+
+            listView.setOnItemClickListener { _, _, position, _ ->
+                val app = displayApps[position]
+                if (listView.isItemChecked(position)) {
+                    selectedPkgs.add(app.packageName)
+                } else {
+                    selectedPkgs.remove(app.packageName)
+                }
+            }
+
+            searchBar.addTextChangedListener(object : android.text.TextWatcher {
+                override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+                override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
+                    updateList(s.toString())
+                }
+                override fun afterTextChanged(s: android.text.Editable?) {}
+            })
 
             com.google.android.material.dialog.MaterialAlertDialogBuilder(this@InteractionSettingsActivity)
                 .setTitle(title)
-                .setMultiChoiceItems(appNames, checkedItems) { _, which, isChecked ->
-                    checkedItems[which] = isChecked
-                }
+                .setView(container as android.view.View)
                 .setPositiveButton("Save") { _, _ ->
-                    val newSelected = pkgNames.filterIndexed { index, _ -> checkedItems[index] }
-                    onSave(newSelected)
+                    onSave(selectedPkgs.toList())
                 }
                 .setNegativeButton("Cancel", null)
                 .show()
