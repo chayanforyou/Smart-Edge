@@ -33,6 +33,8 @@ class HandleSettingsActivity : AppCompatActivity() {
     private fun loadCurrentSettings() {
         binding.featureShowPill.isChecked = panelPrefs.showPill
         
+        updatePillColorUI()
+        
         binding.sbPillThickness.value = panelPrefs.pillWidth.toFloat()
         binding.tvThicknessValue.text = "${panelPrefs.pillWidth}dp"
         
@@ -46,6 +48,18 @@ class HandleSettingsActivity : AppCompatActivity() {
         binding.tvPosValue.text = "${panelPrefs.handleVerticalOffset}dp"
     }
 
+    private fun updatePillColorUI() {
+        try {
+            val color = android.graphics.Color.parseColor(panelPrefs.pillColor)
+            binding.btnPickPillColor.backgroundTintList = android.content.res.ColorStateList.valueOf(color)
+            // Adjust icon tint for contrast
+            val l = androidx.core.graphics.ColorUtils.calculateLuminance(color)
+            binding.btnPickPillColor.iconTint = android.content.res.ColorStateList.valueOf(if (l > 0.5) android.graphics.Color.BLACK else android.graphics.Color.WHITE)
+        } catch (e: Exception) {
+            binding.btnPickPillColor.backgroundTintList = android.content.res.ColorStateList.valueOf(android.graphics.Color.WHITE)
+        }
+    }
+
     private fun setupListeners() {
         binding.featureShowPill.setOnCheckedChangeListener { _, isChecked ->
             panelPrefs.showPill = isChecked
@@ -53,15 +67,24 @@ class HandleSettingsActivity : AppCompatActivity() {
         }
 
         binding.btnPickPillColor.setOnClickListener {
-            // Re-using current accent picker logic if needed, or keeping it simple
-            com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
-                .setTitle("Select Accent Color")
-                .setMessage("Please use the 'Accent Color' setting in Appearance to change this.")
-                .setPositiveButton("Go to Appearance") { _, _ ->
-                    startActivity(Intent(this, AppearanceSettingsActivity::class.java))
-                }
-                .setNegativeButton(android.R.string.cancel, null)
-                .show()
+            val currentColor = try {
+                android.graphics.Color.parseColor(panelPrefs.pillColor)
+            } catch (e: Exception) {
+                android.graphics.Color.WHITE
+            }
+
+            openColorPicker(currentColor) { color ->
+                val hex = String.format("#%08X", color)
+                panelPrefs.pillColor = hex
+                updatePillColorUI()
+                applyOnly()
+            }
+        }
+
+        binding.btnResetPillColor.setOnClickListener {
+            panelPrefs.pillColor = PanelPreferences.DEFAULT_PILL_COLOR
+            updatePillColorUI()
+            applyOnly()
         }
 
         binding.sbPillThickness.addOnChangeListener { _, value, fromUser ->
